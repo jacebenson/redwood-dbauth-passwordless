@@ -1,63 +1,58 @@
-import { useRef } from 'react'
-import { useEffect } from 'react'
-
 import {
   Form,
   Label,
   TextField,
   PasswordField,
-  FieldError,
   Submit,
+  FieldError,
+  useForm,
 } from '@redwoodjs/forms'
-import { Link, navigate, routes } from '@redwoodjs/router'
-import { MetaTags } from '@redwoodjs/web'
-import { toast, Toaster } from '@redwoodjs/web/toast'
-
-import { useAuth } from 'src/auth'
-
-const SignupPage = () => {
-  const { isAuthenticated, signUp } = useAuth()
-  let randomString = () => {
-    return Math.random().toString(36).substring(2, 15)
-  }
-  useEffect(() => {
-    if (isAuthenticated) {
-      navigate(routes.home())
+import { navigate, routes, Link } from '@redwoodjs/router'
+import { MetaTags, useMutation } from '@redwoodjs/web'
+import { Toaster, toast } from '@redwoodjs/web/toast'
+const GENERATE_LOGIN_TOKEN = gql`
+  mutation generateLoginToken($email: String!) {
+    generateLoginToken(email: $email) {
+      message
     }
-  }, [isAuthenticated])
+  }
+`
 
-  // focus on username box on page load
-  const emailRef = useRef(null)
-  useEffect(() => {
-    emailRef.current?.focus()
-  }, [])
-
+const LoginPasswordlessForm = ({ setWaitingForCode, setEmail }) => {
+  const [generateLoginToken, { loading, error }] = useMutation(
+    GENERATE_LOGIN_TOKEN,
+    {
+      onCompleted: () => {
+        toast.success('Check your email for a login link')
+        setWaitingForCode(true)
+      },
+    }
+  )
+  const {
+    handleSubmit,
+    register,
+    formState: { errors, isSubmitting },
+  } = useForm()
   const onSubmit = async (data) => {
-    const response = await signUp({
-      username: data.email,
-      password: randomString(), // this is a random string and is not important
+    setEmail(data.email)
+    const response = await generateLoginToken({
+      variables: { email: data.email },
+      fetchPolicy: 'no-cache',
     })
-
-    if (response.message) {
-      toast(response.message)
-    } else if (response.error) {
+    if (response.error) {
       toast.error(response.error)
-    } else {
-      // user is signed in automatically
-      toast.success('Welcome!')
     }
   }
 
   return (
     <>
-      <MetaTags title="Signup" />
-
+      <MetaTags title="Login" />
       <main className="rw-main">
         <Toaster toastOptions={{ className: 'rw-toast', duration: 6000 }} />
         <div className="rw-scaffold rw-login-container">
           <div className="rw-segment">
             <header className="rw-segment-header">
-              <h2 className="rw-heading rw-heading-secondary">Signup</h2>
+              <h2 className="rw-heading rw-heading-secondary">Login</h2>
             </header>
 
             <div className="rw-segment-main">
@@ -74,7 +69,6 @@ const SignupPage = () => {
                     name="email"
                     className="rw-input"
                     errorClassName="rw-input rw-input-error"
-                    ref={emailRef}
                     validation={{
                       required: {
                         value: true,
@@ -82,11 +76,11 @@ const SignupPage = () => {
                       },
                     }}
                   />
-                  <FieldError name="email" className="rw-field-error" />
 
+                  <FieldError name="email" className="rw-field-error" />
                   <div className="rw-button-group">
                     <Submit className="rw-button rw-button-blue">
-                      Sign Up
+                      Send Token
                     </Submit>
                   </div>
                 </Form>
@@ -94,9 +88,9 @@ const SignupPage = () => {
             </div>
           </div>
           <div className="rw-login-link">
-            <span>Already have an account?</span>{' '}
-            <Link to={routes.login()} className="rw-link">
-              Log in!
+            <span>Don&apos;t have an account?</span>{' '}
+            <Link to={routes.signup()} className="rw-link">
+              Sign up!
             </Link>
           </div>
         </div>
@@ -105,4 +99,4 @@ const SignupPage = () => {
   )
 }
 
-export default SignupPage
+export default LoginPasswordlessForm

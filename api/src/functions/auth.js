@@ -34,18 +34,30 @@ export const handler = async (event, context) => {
   }
 
   const loginOptions = {
-    // handler() is called after finding the user that matches the
-    // username/password provided at login, but before actually considering them
-    // logged in. The `user` argument will be the user in the database that
-    // matched the username/password.
-    //
-    // If you want to allow this user to log in simply return the user.
-    //
-    // If you want to prevent someone logging in for another reason (maybe they
-    // didn't validate their email yet), throw an error and it will be returned
-    // by the `logIn()` function from `useAuth()` in the form of:
-    // `{ message: 'Error message' }`
-    handler: (user) => {
+    handler: async (user) => {
+      let loginTokenExpiresAt = new Date(user?.loginTokenExpiresAt)
+      let now = new Date()
+      let tokenExpired = loginTokenExpiresAt < now
+      console.log({
+        function: 'auth.js',
+        loginTokenExpiresAt,
+        now,
+        tokenExpired,
+      })
+      // if user token is expired, throw an error
+      if (tokenExpired) {
+        throw 'Login token expired'
+      }
+      // when the user logs in, we want to invalidate their login token
+      // so that they can't use it again
+      let where = { id: user.id }
+      let data = { salt: null, loginTokenExpiresAt: null }
+      console.log({ function: 'auth.js', where, data })
+      let result = await db.user.update({
+        where,
+        data,
+      })
+      console.log({ function: 'auth.js', result })
       return user
     },
 
@@ -55,7 +67,7 @@ export const handler = async (event, context) => {
       // For security reasons you may want to make this the same as the
       // usernameNotFound error so that a malicious user can't use the error
       // to narrow down if it's the username or password that's incorrect
-      incorrectPassword: 'Incorrect password for ${username}',
+      incorrectPassword: 'Incorrect token for ${username}',
     },
 
     // How long a user will remain logged in, in seconds
@@ -87,28 +99,13 @@ export const handler = async (event, context) => {
   }
 
   const signupOptions = {
-    // Whatever you want to happen to your data on new user signup. Redwood will
-    // check for duplicate usernames before calling this handler. At a minimum
-    // you need to save the `username`, `hashedPassword` and `salt` to your
-    // user table. `userAttributes` contains any additional object members that
-    // were included in the object given to the `signUp()` function you got
-    // from `useAuth()`.
-    //
-    // If you want the user to be immediately logged in, return the user that
-    // was created.
-    //
-    // If this handler throws an error, it will be returned by the `signUp()`
-    // function in the form of: `{ error: 'Error message' }`.
-    //
-    // If this returns anything else, it will be returned by the
-    // `signUp()` function in the form of: `{ message: 'String here' }`.
     handler: ({ username, hashedPassword, salt, userAttributes }) => {
       return db.user.create({
         data: {
           email: username,
-          hashedPassword: hashedPassword,
-          salt: salt,
-          // name: userAttributes.name
+          loginToken: hashedPassword,
+          salt: null,
+          name: userAttributes.name,
         },
       })
     },
@@ -141,7 +138,7 @@ export const handler = async (event, context) => {
     authFields: {
       id: 'id',
       username: 'email',
-      hashedPassword: 'hashedPassword',
+      hashedPassword: 'loginToken',
       salt: 'salt',
       resetToken: 'resetToken',
       resetTokenExpiresAt: 'resetTokenExpiresAt',
